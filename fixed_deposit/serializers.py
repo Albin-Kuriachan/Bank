@@ -29,4 +29,4 @@ class FDInterestSerializer(serializers.ModelSerializer):
 class CloseFDSerializer(serializers.ModelSerializer):
     class Meta:
         model = FD_Account_Model
-        fields = ['status']
+        fields = "__all__"

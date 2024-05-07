@@ -11,13 +11,16 @@ class FD_Account_Model(models.Model):
     interest_period = models.CharField(max_length=20,null=True, blank=True)
     open_date = models.DateField(auto_now_add=True,null=True, blank=True)
     maturity_date = models.DateField(null=True, blank=True)
-    maturity_amount = models.IntegerField(null=True, blank=True)
+    maturity_amount = models.FloatField(null=True, blank=True)
     STATUS_CHOICES = [
         ('ACTIVE', 'Active'),
         ('CLOSED', 'Closed'),
     ]
 
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='ACTIVE')
+    close_date = models.DateField(null=True, blank=True)
+    close_amount = models.FloatField(null=True, blank=True)
+    current_balance = models.IntegerField(null=True, blank=True)
 
 
 

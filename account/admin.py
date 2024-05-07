@@ -22,7 +22,7 @@ class SavingAdmin(admin.ModelAdmin):
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
-    list_display = ('customer', 'saving_account', 'account', 'amount', 'balance', 'date', 'type', 'transaction_id')
+    list_display = ('customer', 'saving_account', 'receiver_account', 'amount', 'balance', 'date', 'type', 'transaction_id')
     list_filter = ('customer', 'saving_account', 'date', 'type')
     search_fields = ('customer__username', 'saving_account__account_number', 'transaction_id')
     date_hierarchy = 'date'

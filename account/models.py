@@ -14,7 +14,8 @@ class Savings_account(models.Model):
 class Transaction(models.Model):
     customer = models.ForeignKey(Profile, on_delete=models.CASCADE,null=True)
     saving_account = models.ForeignKey(Savings_account, on_delete=models.CASCADE)
-    account = models.IntegerField(null=True)
+    payer_account = models.IntegerField(null=True)
+    receiver_account = models.IntegerField(null=True)
     amount = models.IntegerField()
     balance = models.IntegerField()
     date = models.DateField(auto_now_add=True)

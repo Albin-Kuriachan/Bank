@@ -8,7 +8,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ('username', 'first_name', 'last_name', 'email')
+        fields = ('email', 'password','first_name', 'last_name')
 
     def create(self, validated_data):
         user = CustomUser.objects.create_user(**validated_data)
@@ -20,7 +20,7 @@ class ProfileUpdateserializer(serializers.ModelSerializer):
         fields = ['id','email', 'first_name', 'last_name', 'dob', 'gender', 'phone', 'image']
 
     def validate(self, data):
-        required_fields = ['email', 'first_name']
+        required_fields = ['email', 'first_name','last_name', 'dob', 'gender', 'phone']
         for field in required_fields:
             if not data.get(field):
                 raise serializers.ValidationError(f"{field.capitalize()} field is required.")
@@ -36,11 +36,11 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(style={'input_type': 'password'})
 
     access_token = serializers.SerializerMethodField()
-    refresh_token = serializers.SerializerMethodField()
-
-    def get_refresh_token(self, instance):
-        refresh_token = RefreshToken.for_user(instance)
-        return str(refresh_token)
+    # refresh_token = serializers.SerializerMethodField()
+    #
+    # def get_refresh_token(self, instance):
+    #     refresh_token = RefreshToken.for_user(instance)
+    #     return str(refresh_token)
 
     def get_access_token(self, instance):
         refresh_token = RefreshToken.for_user(instance)

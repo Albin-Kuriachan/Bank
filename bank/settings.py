@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'user',
     'account',
     'fixed_deposit',
+    'loan',
 ]
 
 MIDDLEWARE = [

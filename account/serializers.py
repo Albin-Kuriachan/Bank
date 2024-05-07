@@ -34,8 +34,9 @@ class UpdateSavingBalanceSerializer(serializers.Serializer):
 
 
 class TransferSavingBalanceSerializer(serializers.Serializer):
-    payer_account_number = serializers.CharField(max_length=10)
+    # payer_account_number = serializers.CharField(max_length=10)
     receiver_account_number = serializers.CharField(max_length=10)
+    password = serializers.CharField(max_length=100)
     amount = serializers.DecimalField(max_digits=10, decimal_places=2)
 
     def update(self, instance, validated_data):
@@ -46,7 +47,7 @@ class TransferSavingBalanceSerializer(serializers.Serializer):
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
-        fields = ['amount', 'type','balance']
+        fields = ['payer_account','amount','receiver_account', 'type','balance','date','transaction_id']
 
 
     # def create(self, validated_data):
@@ -55,3 +56,11 @@ class TransactionSerializer(serializers.ModelSerializer):
     #         if not Transaction.objects.filter(transaction_id=transaction_id).exists():
     #             validated_data['transaction_id'] = transaction_id
     #             break
+
+# class WithdrawalSerializer(serializers.Serializer):
+#     amount = serializers.DecimalField(max_digits=5,decimal_places=0)
+#     password = serializers.CharField(max_digits=10)
+
+class WithdrawalSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=5, decimal_places=2)
+    password = serializers.CharField(max_length=128)
