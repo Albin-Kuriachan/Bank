@@ -21,6 +21,7 @@ class FD_Account_Model(models.Model):
     close_date = models.DateField(null=True, blank=True)
     close_amount = models.FloatField(null=True, blank=True)
     current_balance = models.IntegerField(null=True, blank=True)
+    from_account =models.CharField(max_length=10,null=True, blank=True)
 
 
 

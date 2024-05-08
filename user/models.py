@@ -21,6 +21,8 @@ class Profile(models.Model):
     dob = models.DateField(null=True, blank=True)
     gender = models.CharField(max_length=10, choices=GENDER, blank=True, null=True)
     phone = models.IntegerField(blank=True, null=True)
+    pan = models.CharField(max_length=10,blank=True, null=True,unique=True)
+    aadhaar = models.CharField(max_length=12,blank=True, null=True,unique=True)
     image = models.ImageField(upload_to='profile_image', blank=True, null=True)
     created_at = models.DateField(auto_now_add=True, blank=True, null=True)
 
@@ -48,6 +50,20 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault('is_staff', False)
         extra_fields.setdefault('is_superuser', False)
         return self._create_user(email, password, **extra_fields)
+
+    def create_staff(self, email, password=None, **extra_fields):
+        """
+        Creates and saves a staff user with the given email and password.
+        """
+        if not email:
+            raise ValueError('The Email field must be set')
+
+        email = self.normalize_email(email)
+        user = self.model(email=email, is_staff=True, **extra_fields)
+        if password:
+            user.set_password(password)
+        user.save(using=self._db)
+        return user
 
     def create_superuser(self, email, password=None, **extra_fields):
         """Create and save a SuperUser with the given email and password."""

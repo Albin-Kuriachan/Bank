@@ -3,7 +3,8 @@ from django.urls import path
 from .views import *
 
 urlpatterns = [
-    path('', UserProfileRegister.as_view(), name='user-register'),
+    path('user_register/', UserProfileRegister.as_view(), name='user_register'),
+    path('user_email_verify/', UserEmailVerify.as_view(), name='user_email_verify'),
     path('updateprofile/<int:pk>/', UpdateProfileApi.as_view(), name='updateprofile'),
     path('userprofiledata/', UserProfile.as_view(), name='userprofiledata'),
     # path('userprofiledata/<int:pk>/', UserProfile.as_view(), name='userprofiledata'),

@@ -8,5 +8,7 @@ urlpatterns = [
     path('saving_fund_transfer/<int:pk>/', SavingsAccountTransfer.as_view(), name='saving_fund_transfer'),
     path('transaction/<int:pk>/', TransactionRecordAPIView.as_view(), name='transaction'),
     path('withdraw/<int:pk>/', WithdrawalAPIView.as_view(), name='withdraw'),
+    path('set_transaction_limit/<int:pk>/', SetTransactionLimit.as_view(), name='set_transaction_limit'),
+    # path('deposit/', DepositAPIView.as_view(), name='deposit'),
 
 ]

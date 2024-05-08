@@ -3,7 +3,8 @@ from rest_framework import generics
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from .models import CustomUser, Profile
 from .send_otp import send_otp_email
-from .serializers import UserSerializer, ProfileUpdateserializer, LoginSerializer, ProfileDisplayserilizer
+from .serializers import UserSerializer, ProfileUpdateserializer, LoginSerializer, ProfileDisplayserilizer, \
+    Emailserializer, ProfileEditserializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -12,58 +13,89 @@ from django.contrib.auth import logout
 import datetime
 from django.contrib.auth.hashers import check_password
 from django.urls import reverse
-from account.models import Savings_account
+from account.models import Savings_account,AccountApprove
 from fixed_deposit.models import FD_Account_Model
 
 
-# class UserProfileRegister(generics.CreateAPIView):
-#     permission_classes = [AllowAny]
-#     queryset = Profile.objects.all()
-#     serializer_class = ProfileUpdateserializer
+
+class UserEmailVerify(generics.GenericAPIView):
+    serializer_class = Emailserializer
+    permission_classes = [AllowAny]
+
+    def post(self, request, format=None):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            data = serializer.validated_data
+            email = serializer.validated_data.get('email')
+            request.session['otp'] = send_otp_email(email)
+            request.session['email'] = email
+            otp = request.session.get('otp')
+            email = request.session.get('email')
+            print(otp)
+            print('email',email)
+
+            response_data = {
+                'Register Profile': request.build_absolute_uri(reverse('user_register'))
+
+            }
+
+            return Response({"message": "OTP  sent email successfully","Register Profile":response_data}, status=status.HTTP_200_OK)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 class UserProfileRegister(generics.CreateAPIView):
-    # authentication_classes = []
     permission_classes = [AllowAny]
-    # queryset = Profile.objects.all()
     serializer_class = ProfileUpdateserializer
 
     def create(self, request, *args, **kwargs):
+        otp = request.session.get('otp')
+        email = request.session.get('email')
+        print("email",email)
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        success_message = "Profile created successfully."
-        created_id = serializer.data.get('id')
-        open_savings_url = request.build_absolute_uri(reverse('savings', kwargs={'pk': created_id}))
-        # open_fd_url = request.build_absolute_uri(reverse('choose_fd_type', kwargs={'pk': created_id}))
-        # open_fd_url = request.build_absolute_uri(reverse('choose_fd_type') + f'{created_id}/')
+        if serializer.is_valid():
+            entered_otp = serializer.validated_data.get('otp')
+            if entered_otp == str(otp):
+                serializer.save(email=email)
+
+                serializer.save()
+                created_id = serializer.instance.id
+                open_savings_url = request.build_absolute_uri(reverse('savings', kwargs={'pk': created_id}))
+                success_message = "Profile created successfully."
+                del request.session['otp']
+                del request.session['email']
+            else:
+                success_message = "Invalid OTP"
+                open_savings_url = None
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         response_data = {
             'Message': success_message,
             'Choose Account type': {
                 'Savings Account': open_savings_url,
-                # 'Fixed Deposit': open_fd_url,
-                # 'Savings Accounts': profile_detail_url,
             }
         }
 
         return Response(response_data, status=status.HTTP_201_CREATED)
 
-
-
 # Patch profile
 class UpdateProfileApi(generics.UpdateAPIView):
     queryset = Profile.objects.all()
-    serializer_class = ProfileUpdateserializer
+    serializer_class = ProfileEditserializer
 
     def patch(self, request, *args, **kwargs):
         instance = self.get_object()
-        serlaizer = self.get_serializer(instance, data=request.data, partial=True)
+        print(instance,"jj")
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        print(request.data,'jggj')
 
-        if serlaizer.is_valid():
-            serlaizer.save()
-            return Response({'Message': 'Updated successfully'}, status=200)
-        return Response({'Message': "Failed to update", "error": serlaizer.errors}, status=400)
+        if serializer.is_valid():
+            serializer.save()
+            updated_data = request.data
+            return Response({'Message': 'Updated successfully', 'data': updated_data}, status=200)
+        return Response({'Message': "Failed to update", "error": serializer.errors}, status=400)
 
 
 
@@ -77,6 +109,7 @@ class UserProfile(APIView):
             profile = Profile.objects.get(email=user)
             savings_accounts = Savings_account.objects.filter(user=profile)
             fd_accounts = FD_Account_Model.objects.filter(user=profile,status='ACTIVE')
+
             response_data = {
                 "name": f"{profile.first_name} {profile.last_name}",
                 'customer id': profile.id,
@@ -85,6 +118,7 @@ class UserProfile(APIView):
                 'gender': profile.gender,
                 'phone': profile.phone,
                 'image': profile.image.url if profile.image else None,
+                "update profile": request.build_absolute_uri(reverse('updateprofile', kwargs={'pk': profile.id})),
                 'savings_accounts': [],
                 'fd_accounts': []
             }
@@ -95,6 +129,7 @@ class UserProfile(APIView):
                     'withdraw': request.build_absolute_uri(reverse('withdraw', kwargs={'pk': account.account_number})),
                     'transfer': request.build_absolute_uri(reverse('saving_fund_transfer', kwargs={'pk': account.account_number})),
                     'transaction history':request.build_absolute_uri(reverse('transaction', kwargs={'pk': account.account_number})),
+                    'set transaction limit':request.build_absolute_uri(reverse('set_transaction_limit', kwargs={'pk': account.account_number})),
                 })
             for fd in fd_accounts:
                 response_data['fd_accounts'].append({
@@ -143,7 +178,17 @@ class LoginView(generics.GenericAPIView):
                     user_obj.last_login = datetime.datetime.now()
                     user_obj.save()
                     resp_serializer = LoginSerializer(instance=user_obj)
-                    return Response(resp_serializer.data, status=status.HTTP_200_OK)
+                    login = request.build_absolute_uri(reverse('dashboard'))
+
+                    resp_data = resp_serializer.data
+
+                    resp_data.pop('username', None)
+                    resp_data.pop('password', None)
+
+                    resp_data['Login'] = login
+
+                    return Response({"message": "Login successful.", **resp_data}, status=status.HTTP_201_CREATED)
+
                 else:
                     return Response({"Message": "Invalid password"}, status=status.HTTP_400_BAD_REQUEST)
             except CustomUser.DoesNotExist:
@@ -169,11 +214,25 @@ class LoginRegister(generics.CreateAPIView):
         email = serializer.validated_data.get('email')
         if Profile.objects.filter(email=email).exists():
             profile=Profile.objects.filter(email=email)
+            check_approve=AccountApprove.objects.filter(saving_account__user__email=email).first()
+            print(check_approve,"jkhkh")
+            print(check_approve.approved)
             # serializer.validated_data['first_name'] = profile.first_name
             # serializer.validated_data['last_name'] = profile.last_name
 
-            self.perform_create(serializer)
-            return Response({"message": "Profile created successfully."}, status=status.HTTP_201_CREATED)
+            if check_approve.approved:
+                self.perform_create(serializer)
+                login = request.build_absolute_uri(reverse('login'))
+                response_data = {
+
+                    'Login': login,
+                }
+                return Response({"message": "Profile created successfully.", **response_data},
+                                status=status.HTTP_201_CREATED)
+
+            else:
+                return Response({"message": "Your profile is not verified."}, status=status.HTTP_400_BAD_REQUEST)
+
         else:
             return Response({"error": "Not Valid email ."},
                             status=status.HTTP_501_NOT_IMPLEMENTED)
@@ -185,17 +244,22 @@ class Dashboard(generics.ListAPIView):
     
     def get(self, request):
         user = request.user
-        open_savings_url = request.build_absolute_uri(reverse('savings', kwargs={'pk': user.id}))
-        open_fd_url = request.build_absolute_uri(reverse('choose_fd_type', kwargs={'pk': user.id}))
-        # open_fd_url = request.build_absolute_uri(reverse('choose_fd_type') + f'{created_id}/')
+        profile=Profile.objects.get(email=user.email)
+        open_savings_url = request.build_absolute_uri(reverse('savings', kwargs={'pk': profile.id}))
+        open_fd_url = request.build_absolute_uri(reverse('choose_fd_type', kwargs={'pk': profile.id}))
+        account_display = request.build_absolute_uri(reverse('userprofiledata'))
 
         response_data = {
 
-            'Choose Account type': {
+            'Open New Account': {
                 'Savings Account': open_savings_url,
                 'Fixed Deposit': open_fd_url,
                 # 'Savings Accounts': profile_detail_url,
             },
+            'Show Account': {
+                'Accounts':account_display
+
+            }
 
         }
 

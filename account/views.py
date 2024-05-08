@@ -1,33 +1,40 @@
 import random
 
+from django.db.models import F
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.views import View
-from rest_framework import status, generics
+from rest_framework import status, generics,serializers
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .models import Savings_account, Transaction
+from .models import Savings_account, Transaction, AccountApprove
 from .serializers import SavingsAccountSerializer, UpdateSavingBalanceSerializer, DisplayBalanceSerializer, \
-    TransferSavingBalanceSerializer, TransactionSerializer, WithdrawalSerializer
-from user.models import Profile,CustomUser
+    TransferSavingBalanceSerializer, TransactionSerializer, WithdrawalSerializer, DepositSerializer, \
+    TransactionLimitSerializer
+from user.models import Profile, CustomUser
 from django.contrib.auth.hashers import check_password
 
 
-
 class SavingsAccountAPIView(generics.CreateAPIView):
-    authentication_classes = []
     permission_classes = [AllowAny]
     serializer_class = SavingsAccountSerializer
 
     def post(self, request, pk):
         profile_instance = get_object_or_404(Profile, pk=pk)
-        serializer = SavingsAccountSerializer(data=request.data, context={'profile': profile_instance})
+        serializer = SavingsAccountSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(user=profile_instance)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            created_id = serializer.instance
+            print(created_id)
+            approve = AccountApprove(saving_account=created_id)
+            approve.save()
+
+            return Response({"message": "Balance updated successfully", "Account Details": serializer.data},status=status.HTTP_201_CREATED)
+
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class DisplayBalanceAPIView(APIView):
     def post(self, request):
@@ -43,6 +50,7 @@ class DisplayBalanceAPIView(APIView):
                 response_data = {
                     "account_number": account.account_number,
                     "balance": account.balance,
+                    "c": account.balance,
                     "name": f"{user.first_name} {user.last_name}",
                     "savings_api_url": request.build_absolute_uri(savings_api_url)
                 }
@@ -59,12 +67,15 @@ class UpdateSavingsBalanceAPIView(APIView):
 
         if serializer.is_valid():
             account_number = serializer.validated_data.get('account_number')
-            balance = serializer.validated_data.get('balance')
+            amount = serializer.validated_data.get('amount')
 
             try:
                 account = Savings_account.objects.get(account_number=account_number)
-                account.balance += balance
+                account.balance += amount
                 account.save()
+                transaction_record_wd(request, amount, account_number, account.balance, type="cr",
+                                      transaction_type='deposit')
+
                 serialized_account = SavingsAccountSerializer(account)
 
                 return Response({
@@ -79,7 +90,8 @@ class UpdateSavingsBalanceAPIView(APIView):
 
 class SavingsAccountTransfer(APIView):
     permission_classes = [IsAuthenticated]
-    def put(self, request,pk):
+
+    def put(self, request, pk):
         user = request.user
         # save_account=Savings_account.objects.filter(account_number=pk)
         serializer = TransferSavingBalanceSerializer(data=request.data)
@@ -97,8 +109,12 @@ class SavingsAccountTransfer(APIView):
                     payer = Savings_account.objects.get(account_number=payer_account_number)
                     receiver = Savings_account.objects.get(account_number=receiver_account_number)
 
-                    if payer.balance < amount:
-                        return Response({"error": "Insufficient balance in the payer's account"},
+                    if amount > payer.transaction_limit  :
+                        return Response({"error": "Higher than transaction limit"},
+                                        status=status.HTTP_400_BAD_REQUEST)
+
+                    if payer.balance < amount and payer.balance < payer.transaction_limit:
+                        return Response({"error": "Insufficient balance t"},
                                         status=status.HTTP_400_BAD_REQUEST)
 
                     if amount < 1:
@@ -109,12 +125,13 @@ class SavingsAccountTransfer(APIView):
                     receiver.save()
 
                     # payer transaction record
-                    transaction_record(request,amount,payer.account_number,
-                                       receiver.account_number,payer.balance,type="dr",p=payer)
+                    transaction_record(request, amount, receiver.account_number, payer.balance, type="dr", p=payer,
+                                       transaction_type='tranfer')
 
                     # receiver transaction record
-                    transaction_record(request,amount,payer.account_number,receiver.account_number,
-                                       receiver.balance,type="cr",p=receiver)
+                    transaction_record(request, amount, payer.account_number, receiver.balance, type="cr", p=receiver,
+                                       transaction_type='tranfer')
+
                     serialized_payer = SavingsAccountSerializer(payer)
 
                     return Response({
@@ -127,52 +144,62 @@ class SavingsAccountTransfer(APIView):
                     return Response({"error": "Account does not exist"}, status=status.HTTP_404_NOT_FOUND)
             else:
 
-                return Response({"error": "Invalid password"},status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": "Invalid password"}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-def transaction_record(request,amount,receiver,payer,balance,type,p):
-    # cus = Profile.objects.filter(id=p.user.id).first()
+def transaction_record(request, amount, account_data, balance, type, p, transaction_type):
     cus = Profile.objects.get(id=p.user.id)
-    # sa = Savings_account.objects.filter(account_number=p.account_number).first()
     sa = Savings_account.objects.get(account_number=p.account_number)
     while True:
         transaction_id = ''.join(str(random.randint(0, 9)) for _ in range(10))
         if not Transaction.objects.filter(transaction_id=transaction_id).exists():
-            transaction_id = Transaction.transaction_id = transaction_id
+            transaction_id_number = Transaction.transaction_id = transaction_id
             break
-    data = Transaction(customer=cus,saving_account=sa,amount=amount,payer_account=receiver,
-                       receiver_account=payer,balance=balance,transaction_id=transaction_id,type=type)
+
+    transaction_id = f"{transaction_type}/{transaction_id_number}/{account_data}"
+    data = Transaction(customer=cus, saving_account=sa, amount=amount,
+                       balance=balance, transaction_id=transaction_id, type=type)
 
     data.save()
 
 
+class SetTransactionLimit(generics.GenericAPIView):
+    def put(self, request, pk):
+        serializer = TransactionLimitSerializer(data=request.data)
+        if serializer.is_valid():
+            transaction_limit = serializer.validated_data.get('transaction_limit')
+            # Retrieve the savings account based on the provided pk
+            saving_account = get_object_or_404(Savings_account, account_number=pk)
+            # Update the transaction limit
+            saving_account.transaction_limit = transaction_limit
+            saving_account.save()
+            return Response({"message": f"Transaction limit updated to {transaction_limit} successfully"},status=status.HTTP_200_OK)
+
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 
 class TransactionRecordAPIView(generics.GenericAPIView):
-
     permission_classes = [IsAuthenticated]
     serializer_class = TransactionSerializer
 
-    # def get(self, request,pk,format=None,):
-    #     user = request.user
-    #     print(user.email)
-    #     transaction_data = Transaction.objects.filter(account=pk)
-
     def get(self, request, pk, format=None):
-        user = request.user
-        profile = Profile.objects.get(email=user)
-        transaction_data = Transaction.objects.filter(payer_account=pk,customer=profile)
+        transaction_data = Transaction.objects.filter(saving_account__account_number=pk)
+        transaction_data = transaction_data.order_by('-id')
         serializer = self.serializer_class(transaction_data, many=True)
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-
 class WithdrawalAPIView(APIView):
     permission_classes = [IsAuthenticated]
-    def post(self, request,pk):
-        user=request.user
+
+    def post(self, request, pk):
+        user = request.user
         serializer = WithdrawalSerializer(data=request.data)
         if serializer.is_valid():
             amount = serializer.validated_data['amount']
@@ -182,7 +209,10 @@ class WithdrawalAPIView(APIView):
                 if account.balance >= amount:
                     account.balance -= amount
                     account.save()
-                    return Response({'message': 'Withdrawal successful', 'balance': account.balance}, status=status.HTTP_200_OK)
+                    transaction_record_wd(request, amount, account.account_number, account.balance, type="dr",transaction_type='withdraw')
+
+                    return Response({'message': 'Withdrawal successful', 'balance': account.balance},
+                                    status=status.HTTP_200_OK)
                 else:
                     return Response({'error': 'Insufficient funds'}, status=status.HTTP_400_BAD_REQUEST)
             else:
@@ -192,5 +222,32 @@ class WithdrawalAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+def transaction_record_wd(request, amount, account, balance, type, transaction_type):
+    sa = Savings_account.objects.get(account_number=account)
+    while True:
+        transaction_id = ''.join(str(random.randint(0, 9)) for _ in range(10))
+        if not Transaction.objects.filter(transaction_id=transaction_id).exists():
+            transaction_id_number = Transaction.transaction_id = transaction_id
+            break
+
+    transaction_id = f"{transaction_type}/{transaction_id_number}"
+    data = Transaction(customer=sa.user, saving_account=sa, amount=amount, balance=balance,
+                       transaction_id=transaction_id, type=type)
+    data.save()
 
 
+# class DepositAPIView(generics.UpdateAPIView):
+#     serializer_class = DepositSerializer
+#
+#     def put(self, request):
+#         serializer = self.get_serializer(data=request.data)
+#         if serializer.is_valid():
+#             account_number = serializer.validated_data.get('account_number')
+#             amount = serializer.validated_data.get('amount')
+#             saving_account = get_object_or_404(Savings_account, account_number=account_number)
+#             saving_account.balance += amount
+#             saving_account.save()
+#             transaction_record_wd(request, amount, account_number, saving_account.balance, type="cr",transaction_type='deposit')
+#             return Response({"message": "Deposit successful", "data": serializer.data}, status=status.HTTP_200_OK)
+#         else:
+#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
