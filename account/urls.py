@@ -10,5 +10,7 @@ urlpatterns = [
     path('withdraw/<int:pk>/', WithdrawalAPIView.as_view(), name='withdraw'),
     path('set_transaction_limit/<int:pk>/', SetTransactionLimit.as_view(), name='set_transaction_limit'),
     # path('deposit/', DepositAPIView.as_view(), name='deposit'),
+    path('saving_account/', SavingAccount.as_view(), name='saving_account'),
+    path('saving_account_data/<int:pk>/', SavingAccountData.as_view(), name='saving_account_data'),
 
 ]

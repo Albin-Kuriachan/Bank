@@ -15,7 +15,7 @@ from django.contrib.auth.hashers import check_password
 from django.urls import reverse
 from account.models import Savings_account,AccountApprove
 from fixed_deposit.models import FD_Account_Model
-
+from loan.models import Loan_data
 
 
 class UserEmailVerify(generics.GenericAPIView):
@@ -98,17 +98,69 @@ class UpdateProfileApi(generics.UpdateAPIView):
         return Response({'Message': "Failed to update", "error": serializer.errors}, status=400)
 
 
+class Dashboard(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        profile = Profile.objects.get(email=user.email)
+        open_savings_url = request.build_absolute_uri(reverse('savings', kwargs={'pk': profile.id}))
+        open_fd_url = request.build_absolute_uri(reverse('choose_fd_type', kwargs={'pk': profile.id}))
+        loan = request.build_absolute_uri(reverse('loan'))
+        # account_display = request.build_absolute_uri(reverse('userprofiledata'))
+        saving_account = request.build_absolute_uri(reverse('saving_account'))
+        fixed_deposit = request.build_absolute_uri(reverse('fixed_deposit'))
+        loan_account = request.build_absolute_uri(reverse('loan_account'))
+
+        response_data = {
+            'Profile' :{
+                "name": f"{profile.first_name} {profile.last_name}",
+                'customer id': profile.id,
+                'email': profile.email,
+                'dob': profile.dob,
+                'gender': profile.gender,
+                'phone': profile.phone,
+                'image': profile.image.url if profile.image else None,
+                "update profile": request.build_absolute_uri(reverse('updateprofile', kwargs={'pk': profile.id}))
+                # 'savings_accounts': [],
+                # 'fd_accounts': [],
+                # 'loan_data': []
+            },
+
+
+            'Account': {
+
+                # 'Accounts': account_display
+                'Saving Account':saving_account,
+                'Fixed Deposit':fixed_deposit,
+                'Loan':loan_account,
+            },
+
+            'Open New Account': {
+                'Savings Account': open_savings_url,
+                'Fixed Deposit': open_fd_url,
+                'Loan': loan,
+                # 'Savings Accounts': profile_detail_url,
+            },
+
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+
+
+
 
 # Single profile
 class UserProfile(APIView):
     def get(self, request, *args, **kwargs):
         user = request.user
-        print("user",user,user.id)
 
         try:
             profile = Profile.objects.get(email=user)
             savings_accounts = Savings_account.objects.filter(user=profile)
             fd_accounts = FD_Account_Model.objects.filter(user=profile,status='ACTIVE')
+            loan_accounts = Loan_data.objects.filter(user=profile)
 
             response_data = {
                 "name": f"{profile.first_name} {profile.last_name}",
@@ -120,7 +172,8 @@ class UserProfile(APIView):
                 'image': profile.image.url if profile.image else None,
                 "update profile": request.build_absolute_uri(reverse('updateprofile', kwargs={'pk': profile.id})),
                 'savings_accounts': [],
-                'fd_accounts': []
+                'fd_accounts': [],
+                'loan_data': []
             }
             for account in savings_accounts:
                 response_data['savings_accounts'].append({
@@ -143,6 +196,19 @@ class UserProfile(APIView):
                     # 'close fd':request.build_absolute_uri(reverse('close_fd') + f'{fd.account_number}/')
                     'close fd':request.build_absolute_uri(reverse('close_fd', kwargs={'pk': fd.account_number}))
 
+                })
+            for loan in loan_accounts:
+                response_data['loan_data'].append({
+                    'loan': loan.loan_name,
+                    'loan account number': loan.loan_account_number,
+                    'loan amount': loan.loan_amount,
+                    'interest rate': loan.interest_rate,
+                    'month': loan.period,
+                    'emi': loan.emi,
+                    'open date': loan.open_date,
+                    'end date': loan.end_date,
+                    'end amount': loan.end_amount,
+                    'transferred account': loan.to_account,
                 })
 
             return Response(response_data)
@@ -236,34 +302,6 @@ class LoginRegister(generics.CreateAPIView):
         else:
             return Response({"error": "Not Valid email ."},
                             status=status.HTTP_501_NOT_IMPLEMENTED)
-
-
-
-class Dashboard(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
-    
-    def get(self, request):
-        user = request.user
-        profile=Profile.objects.get(email=user.email)
-        open_savings_url = request.build_absolute_uri(reverse('savings', kwargs={'pk': profile.id}))
-        open_fd_url = request.build_absolute_uri(reverse('choose_fd_type', kwargs={'pk': profile.id}))
-        account_display = request.build_absolute_uri(reverse('userprofiledata'))
-
-        response_data = {
-
-            'Open New Account': {
-                'Savings Account': open_savings_url,
-                'Fixed Deposit': open_fd_url,
-                # 'Savings Accounts': profile_detail_url,
-            },
-            'Show Account': {
-                'Accounts':account_display
-
-            }
-
-        }
-
-        return Response(response_data, status=status.HTTP_200_OK)
 
 
 

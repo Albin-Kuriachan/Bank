@@ -5,39 +5,18 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from datetime import datetime, timedelta
+
+from rest_framework.views import APIView
+
 from .models import Interest_Table, FD_Account_Model
 from .serializers import FDAccountSerializer, FDInterestSerializer, CloseFDSerializer
 from user.models import Profile
-
 from account.models import Savings_account
-
 from account.views import transaction_record_wd,transaction_record
 
 
 
 # Display Account to choose
-# class Choose_Account(generics.ListAPIView):
-#     permission_classes = [IsAuthenticated]
-#     def get(self, request, pk, id):
-#         user = request.user
-#         savings_accounts = Savings_account.objects.filter(user=pk)
-#
-#         response_data = {
-#             'choose_account': [],
-#         }
-#         fd_url = reverse('fd', kwargs={'pk': pk, 'id': id)
-#
-#         for account in savings_accounts:
-#             response_data['choose_account'].append({
-#                 'savings_account_number': account.account_number,
-#                 'balance': account.balance
-#             })
-#
-#         # for interest_data in serializer.data:
-#         #     fd_url = reverse('fd', kwargs={'pk': pk, 'id': interest_data["id"]})
-#         #     interest_data["Fixed Deposit"] = request.build_absolute_uri(fd_url)
-#         #     response_data.append(interest_data)
-#         return Response(response_data, status=status.HTTP_200_OK)
 
 class Choose_Account(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
@@ -66,8 +45,7 @@ class Choose_Account(generics.ListAPIView):
 # create fd account
 
 class FDAccountAPIView(generics.CreateAPIView):
-    # authentication_classes = []
-    # permission_classes = [AllowAny]
+
     serializer_class = FDAccountSerializer
 
     def post(self, request, pk, id,account):
@@ -138,28 +116,24 @@ class Choose_Fd(ListAPIView):
 
         response_data = []
         for interest_data in serializer.data:
-            fd_url = reverse('fd', kwargs={'pk': pk, 'id': interest_data["id"]})
+            fd_url = reverse('account_choose', kwargs={'pk': pk, 'id': interest_data["id"]})
             interest_data["Fixed Deposit"] = request.build_absolute_uri(fd_url)
             response_data.append(interest_data)
         return Response(response_data, status=status.HTTP_200_OK)
 
 
 class Close_FD(generics.UpdateAPIView):
-    serializer_class = CloseFDSerializer
+    # serializer_class = CloseFDSerializer
 
     def calculate_close_amount(self, fd_instance):
         # current_date = datetime.now().date()
         print(fd_instance.open_date)
         print(fd_instance.close_date)
         active_period = fd_instance.close_date - fd_instance.open_date
-        print('active', active_period)
         active_days = active_period.days
-        print('active_days', active_days)
         total_interest = (fd_instance.deposit_amount * fd_instance.interest_rate * active_days) / (365 * 100)
         total_interest = round(total_interest, 2)
-        print('total_interest', total_interest)
         close_amount = fd_instance.deposit_amount + total_interest
-        print('close_amount', close_amount)
 
         return close_amount
 
@@ -193,3 +167,32 @@ class Close_FD(generics.UpdateAPIView):
 
         return Response(
             {"message": "FD account closed successfully", "close_amount": close_amount, "data": serializer.data})
+
+
+class FdAccount(APIView):
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        response_data = {'fd_accounts': []}
+
+        try:
+            profile = Profile.objects.get(email=user)
+            fd_accounts = FD_Account_Model.objects.filter(user=profile,status='ACTIVE')
+
+            for fd in fd_accounts:
+                response_data['fd_accounts'].append({
+                    'fd_account_number': fd.account_number,
+                    'deposit amount': fd.deposit_amount,
+                    'interest rate': fd.interest_rate,
+                    'open date': fd.open_date,
+                    'tenure': fd.tenure,
+                    'maturity amount': fd.maturity_amount,
+                    'maturity date': fd.maturity_date,
+                    # 'close fd':request.build_absolute_uri(reverse('close_fd') + f'{fd.account_number}/')
+                    'close fd': request.build_absolute_uri(reverse('close_fd', kwargs={'pk': fd.account_number}))
+
+                })
+
+        except Profile.DoesNotExist:
+            pass
+
+        return Response(response_data)

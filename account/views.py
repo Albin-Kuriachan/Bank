@@ -15,6 +15,8 @@ from .serializers import SavingsAccountSerializer, UpdateSavingBalanceSerializer
 from user.models import Profile, CustomUser
 from django.contrib.auth.hashers import check_password
 
+from user.send_otp import send_email
+
 
 class SavingsAccountAPIView(generics.CreateAPIView):
     permission_classes = [AllowAny]
@@ -162,7 +164,10 @@ def transaction_record(request, amount, account_data, balance, type, p, transact
     data = Transaction(customer=cus, saving_account=sa, amount=amount,
                        balance=balance, transaction_id=transaction_id, type=type)
 
+
     data.save()
+
+    send_email(cus.email,type,amount,sa.account_number,balance)
 
 
 class SetTransactionLimit(generics.GenericAPIView):
@@ -251,3 +256,53 @@ def transaction_record_wd(request, amount, account, balance, type, transaction_t
 #             return Response({"message": "Deposit successful", "data": serializer.data}, status=status.HTTP_200_OK)
 #         else:
 #             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# savings accounts display
+
+class SavingAccount(APIView):
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        response_data = {'savings_accounts': []}  # Initialize response_data
+
+        try:
+            profile = Profile.objects.get(email=user)
+            savings_accounts = Savings_account.objects.filter(user=profile)
+
+            for account in savings_accounts:
+                response_data['savings_accounts'].append({
+                    'savings_account_number': account.account_number,
+                    'balance': account.balance,
+                    'withdraw': request.build_absolute_uri(reverse('withdraw', kwargs={'pk': account.account_number})),
+                    'transfer': request.build_absolute_uri(reverse('saving_fund_transfer', kwargs={'pk': account.account_number})),
+                    'transaction_history': request.build_absolute_uri(reverse('transaction', kwargs={'pk': account.account_number})),
+                    'set_transaction_limit': request.build_absolute_uri(reverse('set_transaction_limit', kwargs={'pk': account.account_number})),
+                })
+
+        except Profile.DoesNotExist:
+            pass
+
+        return Response(response_data)
+
+
+class SavingAccountData(APIView):
+    def get(self, request,pk, *args, **kwargs):
+        user = request.user
+        response_data = {'savings_accounts': []}
+
+        try:
+            profile = Profile.objects.get(email=user)
+            savings_accounts = Savings_account.objects.filter(user=profile)
+
+            for account in savings_accounts:
+                response_data['savings_accounts'].append({
+                    'savings_account_number': account.account_number,
+                    'balance': account.balance,
+                    'choose account to pay': request.build_absolute_uri(reverse('loan_payment', kwargs={'sa': account.account_number,'pk':pk})),
+                    'choose account to close loan': request.build_absolute_uri(reverse('close_loan', kwargs={'sa': account.account_number,'pk':pk}))
+                })
+        except Profile.DoesNotExist:
+            pass
+
+        return Response(response_data)
+

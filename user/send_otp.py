@@ -13,6 +13,19 @@ def send_otp_email(email):
     return otp
 
 
+def send_email(email, type, amount, account_number, balance):
+    if type == 'cr':
+        type = "Credited"
+    else:
+        type = 'Debited'
+
+    account_number= account_number[-4:]
+
+    subject = 'Account Transaction Alert'
+    message = f'Your account ending with {account_number} has a {type} of Rs {amount}. Final balance: {balance}'
+    email_from = settings.EMAIL_HOST_USER
+    recipient_list = [email]
+    send_mail(subject, message, email_from, recipient_list)
 
 # def send_forget_password_mail(email, token):
 #     subject = 'Your forget password link'
