@@ -27,10 +27,29 @@ def send_email(email, type, amount, account_number, balance):
     recipient_list = [email]
     send_mail(subject, message, email_from, recipient_list)
 
-# def send_forget_password_mail(email, token):
-#     subject = 'Your forget password link'
-#     message = f'Click the link to register http://127.0.0.1:8000/account/change_password/{token}/'
-#     email_from = settings.EMAIL_HOST_USER
-#     recipient_list = [email]
-#     send_mail(subject, message, email_from, recipient_list)
-#     return True
+def send_forget_password_mail(email, token):
+    subject = 'Your  password rest link'
+    message = f'Click the link to register http://127.0.0.1:8000/change_password/{token}/'
+    print(message)
+    email_from = settings.EMAIL_HOST_USER
+    recipient_list = [email]
+    send_mail(subject, message, email_from, recipient_list)
+    return True
+
+
+def regtion_mail(email, data):
+    subject = 'Your profile registered'
+    message = f'Your profile registration is completed successfully your customer id  {data}'
+    print(message)
+    email_from = settings.EMAIL_HOST_USER
+    recipient_list = [email]
+    send_mail(subject, message, email_from, recipient_list)
+
+def regtion_mail_staff(email, data,staff_email,staff_login_register):
+    subject = 'Your profile registered'
+    message = f'Your staff profile registration is completed successfully.' \
+              f' Your staff email {staff_email} staff id is {data}. Click the link to Register Staff Portal {staff_login_register}'
+    print(message)
+    email_from = settings.EMAIL_HOST_USER
+    recipient_list = [email]
+    send_mail(subject, message, email_from, recipient_list)

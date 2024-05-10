@@ -4,7 +4,7 @@ from django.db.models import F
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.views import View
-from rest_framework import status, generics,serializers
+from rest_framework import status, generics, serializers, permissions
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -63,7 +63,11 @@ class DisplayBalanceAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+
+# Deposit to account
 class UpdateSavingsBalanceAPIView(APIView):
+    permission_classes = [permissions.IsAdminUser]
     def put(self, request):
         serializer = UpdateSavingBalanceSerializer(data=request.data)
 

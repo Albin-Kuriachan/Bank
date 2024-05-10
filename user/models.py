@@ -3,8 +3,7 @@ from django.db import models
 from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
 from django.db.models.signals import post_save
-
-
+from staff.models import StaffProfile
 
 
 class Profile(models.Model):
@@ -13,18 +12,17 @@ class Profile(models.Model):
         ('Female', 'Female'),
         ('Other', 'Other')
     ]
-
-    # user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, unique=True)
-    email = models.EmailField(max_length=100, blank=True, null=True)
-    first_name = models.CharField(max_length=100, blank=True, null=True)
-    last_name = models.CharField(max_length=100, blank=True, null=True)
-    dob = models.DateField(null=True, blank=True)
-    gender = models.CharField(max_length=10, choices=GENDER, blank=True, null=True)
-    phone = models.IntegerField(blank=True, null=True)
-    pan = models.CharField(max_length=10,blank=True, null=True,unique=True)
-    aadhaar = models.CharField(max_length=12,blank=True, null=True,unique=True)
+    email = models.EmailField(max_length=100)
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    dob = models.DateField(null=True)
+    gender = models.CharField(max_length=10, choices=GENDER)
+    phone = models.IntegerField()
+    pan = models.CharField(max_length=10,unique=True)
+    aadhaar = models.CharField(max_length=12)
     image = models.ImageField(upload_to='profile_image', blank=True, null=True)
     created_at = models.DateField(auto_now_add=True, blank=True, null=True)
+    approved = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['id']
@@ -79,12 +77,14 @@ class CustomUserManager(BaseUserManager):
 
 
 class CustomUser(AbstractUser):
-    user = models.OneToOneField(Profile, on_delete=models.CASCADE, unique=True,blank=True,null= True)
+    customer_id = models.OneToOneField(Profile, on_delete=models.CASCADE, unique=True,null=True)
+    staff_id = models.OneToOneField(StaffProfile, on_delete=models.CASCADE, unique=True,null=True)
     username = None
     email = models.EmailField(_('email address'), unique=True)
+    reset_password_token = models.CharField(max_length=100,null=True, blank=True)
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []
+    REQUIRED_FIELDS = ['reset_password_token']
 
     objects = CustomUserManager()
 

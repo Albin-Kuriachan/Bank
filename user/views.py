@@ -1,10 +1,12 @@
+import uuid
 from django.shortcuts import render, redirect, get_object_or_404
-from rest_framework import generics
+from rest_framework import generics, permissions
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from .models import CustomUser, Profile
-from .send_otp import send_otp_email
+from .permission import IsNotAdminOrStaff
+from .send_otp import send_otp_email, send_forget_password_mail, regtion_mail
 from .serializers import UserSerializer, ProfileUpdateserializer, LoginSerializer, ProfileDisplayserilizer, \
-    Emailserializer, ProfileEditserializer
+    Emailserializer, ProfileEditserializer, RestPasswordSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -35,7 +37,8 @@ class UserEmailVerify(generics.GenericAPIView):
             print('email',email)
 
             response_data = {
-                'Register Profile': request.build_absolute_uri(reverse('user_register'))
+                'Register Profile': request.build_absolute_uri(reverse('user_register')),
+                # 'Rest Password': request.build_absolute_uri(reverse('restpassword'))
 
             }
 
@@ -45,12 +48,15 @@ class UserEmailVerify(generics.GenericAPIView):
 
 
 
+
+
 class UserProfileRegister(generics.CreateAPIView):
     permission_classes = [AllowAny]
     serializer_class = ProfileUpdateserializer
 
     def create(self, request, *args, **kwargs):
         otp = request.session.get('otp')
+        print(otp)
         email = request.session.get('email')
         print("email",email)
         serializer = self.get_serializer(data=request.data)
@@ -58,13 +64,15 @@ class UserProfileRegister(generics.CreateAPIView):
             entered_otp = serializer.validated_data.get('otp')
             if entered_otp == str(otp):
                 serializer.save(email=email)
-
                 serializer.save()
                 created_id = serializer.instance.id
+                print(created_id)
                 open_savings_url = request.build_absolute_uri(reverse('savings', kwargs={'pk': created_id}))
-                success_message = "Profile created successfully."
-                del request.session['otp']
-                del request.session['email']
+                success_message = "Profile created successfully check email for customer id."
+                regtion_mail(email,created_id)
+                #
+                # del request.session['otp']
+                # del request.session['email']
             else:
                 success_message = "Invalid OTP"
                 open_savings_url = None
@@ -99,8 +107,9 @@ class UpdateProfileApi(generics.UpdateAPIView):
 
 
 class Dashboard(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
-
+    # permission_classes = [IsAuthenticated]
+    # permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsNotAdminOrStaff]
     def get(self, request):
         user = request.user
         profile = Profile.objects.get(email=user.email)
@@ -153,6 +162,7 @@ class Dashboard(generics.ListAPIView):
 
 # Single profile
 class UserProfile(APIView):
+
     def get(self, request, *args, **kwargs):
         user = request.user
 
@@ -256,10 +266,21 @@ class LoginView(generics.GenericAPIView):
                     return Response({"message": "Login successful.", **resp_data}, status=status.HTTP_201_CREATED)
 
                 else:
-                    return Response({"Message": "Invalid password"}, status=status.HTTP_400_BAD_REQUEST)
+                    rest = request.build_absolute_uri(reverse('restpassword'))
+                    response_data = {
+
+                        'Rest Password': rest,
+                    }
+                    return Response({"Message": "Invalid password",**response_data}, status=status.HTTP_400_BAD_REQUEST)
             except CustomUser.DoesNotExist:
-                return Response({"Message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+                register = request.build_absolute_uri(reverse('login_register'))
+                response_data = {
+
+                    'Register': register,
+                }
+                return Response({"Message": "User not found",**response_data}, status=status.HTTP_404_NOT_FOUND)
         else:
+            print("kkhkhkhk")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -279,30 +300,93 @@ class LoginRegister(generics.CreateAPIView):
 
         email = serializer.validated_data.get('email')
         if Profile.objects.filter(email=email).exists():
-            profile=Profile.objects.filter(email=email)
-            check_approve=AccountApprove.objects.filter(saving_account__user__email=email).first()
-            print(check_approve,"jkhkh")
-            print(check_approve.approved)
-            # serializer.validated_data['first_name'] = profile.first_name
-            # serializer.validated_data['last_name'] = profile.last_name
+            profile=Profile.objects.filter(email=email,approved=True)
 
-            if check_approve.approved:
+
+            if profile:
                 self.perform_create(serializer)
                 login = request.build_absolute_uri(reverse('login'))
                 response_data = {
-
                     'Login': login,
                 }
                 return Response({"message": "Profile created successfully.", **response_data},
                                 status=status.HTTP_201_CREATED)
 
             else:
-                return Response({"message": "Your profile is not verified."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"message": "Your profile is not verified try later."}, status=status.HTTP_400_BAD_REQUEST)
 
         else:
             return Response({"error": "Not Valid email ."},
                             status=status.HTTP_501_NOT_IMPLEMENTED)
 
 
+class LoginPasswordRest(generics.CreateAPIView):
+    permission_classes = [AllowAny]
+    serializer_class =Emailserializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data.get('email')
+
+            user = CustomUser.objects.filter(email=email).first()
+            if not user:
+                return Response({"message": f"No user found with email {email}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            token = str(uuid.uuid4())
+            profile_obj = CustomUser.objects.get(email=email)
+            profile_obj.reset_password_token = token
+            profile_obj.save()
+            print('token', token)
+            request.session['token'] = token
+            request.session['email'] = email
+            send_forget_password_mail(email, token)
+            # time.sleep(5)
+            # messages.success(request, 'Check Your Email To Reset Password')
+            return Response({"message": "Password reset email sent"}, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class LoginPasswordChanage(generics.CreateAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = RestPasswordSerializer
+    def put(self, request,token, *args, **kwargs):
+        user = get_object_or_404(CustomUser, reset_password_token=token)
+        print(user)
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            password = serializer.validated_data.get('password')
+            print(password)
+            user.set_password(password)
+            user.reset_password_token = None
+            user.save()
+            return Response({"message": "Password Reset Successful"}, status=status.HTTP_200_OK)
 
 
+
+# class LoginPasswordRest(generics.UpdateAPIView):
+#     permission_classes = [AllowAny]
+#     serializer_class = UserSerializer
+#
+#     def put(self, request, *args, **kwargs):
+#         otp = request.session.get('otp')
+#         email = request.session.get('email')
+#
+#         if not otp or not email:
+#             return Response({"message": "OTP or email not found in session."}, status=status.HTTP_400_BAD_REQUEST)
+#
+#         serializer = self.get_serializer(data=request.data)
+#         if serializer.is_valid():
+#             entered_otp = serializer.validated_data.get('otp')
+#             if entered_otp == str(otp):
+#                 user = CustomUser.objects.get(email=email)
+#                 password = serializer.validated_data.get('password')
+#                 user.set_password(password)
+#                 user.save()
+#                 return Response(
+#                     {"message": "Password changed successfully."}, status=status.HTTP_200_OK
+#                 )
+#             else:
+#                 return Response({"message": "Incorrect OTP entered."}, status=status.HTTP_400_BAD_REQUEST)
+#         else:
+#             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

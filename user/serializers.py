@@ -8,14 +8,22 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ('email', 'password','first_name', 'last_name')
+        fields = ('customer_id','email', 'password')
 
     def create(self, validated_data):
         user = CustomUser.objects.create_user(**validated_data)
         return user
 
+    def validate(self, data):
+        if 'customer_id' not in data:
+            raise serializers.ValidationError("customer_id is required")
+        return data
+
 class Emailserializer(serializers.Serializer):
     email =serializers.EmailField()
+
+class RestPasswordSerializer(serializers.Serializer):
+    password =serializers.CharField(max_length=20)
 
 
 # class ProfileUpdateserializer(serializers.ModelSerializer):

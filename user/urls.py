@@ -13,5 +13,7 @@ urlpatterns = [
     path('logout/', Logout.as_view(), name='logout'),
     path('login_register/', LoginRegister.as_view(), name='login_register'),
     path('dashboard/', Dashboard.as_view(), name='dashboard'),
+    path('restpassword/', LoginPasswordRest.as_view(), name='restpassword'),
+    path('change_password/<token>/', LoginPasswordChanage.as_view(), name='change_password'),
 
 ]
